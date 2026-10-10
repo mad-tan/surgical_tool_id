@@ -109,3 +109,39 @@ Ranking is by expected impact on the score the graders compute:
   silently loses or mislabels one of each pair; (b) in a filename-keyed CSV the
   two predictions for such a frame cannot be told apart; (c) some crops show
   part of the second tool, so a little label ambiguity is inherent.
+
+## Evaluation protocol (step 3, `toolid/`)
+Video-grouped 5-fold CV over train+validation pooled (1402 images, 10
+videos), labels = class folder, samples keyed by relative path. Fold
+assignment and its rationale: `toolid/folds.py`; check with
+`python scripts/describe_folds.py`. Headline metric: macro-F1 on the pooled
+out-of-fold predictions; per-fold macro-F1 shown for spread. Every model
+variant is run with ≥3 seeds and reported as mean ± std.
+Reference point: uniform random guessing scores ≈0.24 macro-F1 on this class mix.
+
+## Baseline: the shipped pipeline (step 4, `scripts/baseline_legacy.py`)
+| Setting | macro-F1 | clipper | grasper | hook | scissor |
+|---|---|---|---|---|---|
+| A. shipped `model_best.pt`, shipped predict.py mapping, **in-sample** | 0.152 | 0.06 | 0.06 | 0.04 | 0.45 |
+| A. shipped `model_best.pt`, correct mapping, **in-sample** | 0.740 | 0.74 | 0.87 | 0.90 | 0.45 |
+| B. original recipe retrained per fold (labels.csv), shipped mapping | **0.111 ± 0.004** | 0.14 | 0.12 | 0.06 | 0.12 |
+| B. original recipe retrained per fold (labels.csv), correct mapping | **0.514 ± 0.063** | 0.42 | 0.77 | 0.75 | 0.12 |
+| B. same, folder labels instead of labels.csv, correct mapping | 0.534 ± 0.034 | 0.40 | 0.78 | 0.75 | 0.20 |
+
+(B rows: pooled out-of-fold, mean over seeds 0,1,2; per-class F1 are seed means.)
+
+What this says:
+- **Honest "before" = 0.11 macro-F1** for the submission as shipped (worse
+  than random guessing, because of the name mapping), and **0.51** for the
+  same model with the mapping fixed. A is in-sample (the checkpoint saw every
+  image), so it only bounds fit; the 0.74 → 0.51 gap is what the model had
+  memorised about the videos it was trained on.
+- **Scissor is the bottleneck**: F1 0.12-0.20; the model almost never predicts
+  scissor (28 of 429 true scissors over 3 seeds, labels.csv run). Clipper is
+  the second weakest (often called grasper).
+- **Seed noise is large** for this recipe (0.43-0.56 across seeds): early
+  stopping on a batch-size-2 training loss stops anywhere between 5 and 30
+  epochs. A change has to beat the baseline by clearly more than ~0.05 to
+  count.
+- Removing the 4% label noise (+0.02) is within seed noise for this model; it
+  is still the correct thing to do (the graders' labels are the folders).
