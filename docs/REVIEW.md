@@ -145,3 +145,19 @@ What this says:
   count.
 - Removing the 4% label noise (+0.02) is within seed noise for this model; it
   is still the correct thing to do (the graders' labels are the folders).
+
+## Colour: signal or nuisance? (`scripts/colour_analysis.py`)
+Per-image colour statistics, share of variance explained by video vs class (eta²):
+- **Chromaticity (hue / white balance, brightness removed) is a video
+  signature, not a class cue**: blue share 0.47 by video vs 0.03 by class,
+  red share 0.35 vs 0.08. Video 7697 is bluish, 7695 and 7697 are darker; the
+  same 9 colour numbers identify the video 63% of the time (majority 31%).
+- **Brightness and contrast do carry class signal**: per-channel mean/std
+  0.18-0.33 by class (hook = white insulated cone → brighter, higher contrast).
+  The 9 numbers alone reach macro-F1 0.41 under video-grouped CV (hook 0.75).
+- Implications for the ladder: hue / white-balance (per-channel gain)
+  augmentation should be strong because it removes a shortcut that does not
+  transfer to new videos; brightness/contrast jitter should be mild; per-image
+  standardisation of mean/std would delete real hook evidence, so test
+  white-balance-only normalisation (equalise channel ratios, keep luminance)
+  rather than full per-image normalisation.
