@@ -186,6 +186,7 @@ including ones that did not help. Full reports: `results/cv/<name>.json`.
 | 1c | `r1c_smallcnn_affine`: 1a + affine only (scale ±10%, shift ±5%, rotate ±10°), no flip | 0.654 ± 0.030 | 0.60 ± 0.06 | 0.39 ± 0.04 | **−0.035, reject.** Geometric jitter alone also hurts this model and makes it seed-sensitive. Plausible reasons: the crops are centred on the tool tip with a consistent framing, and SmallCNN ends in a position-specific 4096→4 linear layer (no global pooling), so moving content around costs more than it regularises within 30 epochs. |
 | 1d | `r1d_smallcnn_hflip`: 1a + horizontal flip only | 0.621 ± 0.008 | 0.61 ± 0.01 | 0.31 ± 0.03 | **−0.068, reject. Confirms the orientation hypothesis:** flip alone accounts for most of 1b's loss, and the class that drops most is grasper (0.84 → 0.76), the class whose shafts come from both sides. Mirror augmentation (and mirror test-time augmentation) is ruled out for every later model. |
 | 2a | `r2a_smallcnn_classweights`: 1a + cross-entropy weighted by inverse class frequency | 0.695 ± 0.010 | 0.66 ± 0.01 | 0.43 ± 0.02 | **+0.006, tie (inside the seed spread).** Rare classes move the right way (clipper +0.015, scissor +0.018) without hurting the others, but the gain has not earned a place on its own. Re-tested on the pretrained model, where it is free. |
+| 2b | `r2b_smallcnn_balanced`: 1a + class-balanced sampling (with replacement) | 0.683 ± 0.017 | 0.64 ± 0.01 | 0.43 ± 0.04 | **−0.006, tie, not adopted.** Scissor +0.015 but clipper −0.014 and a wider seed spread (oversampling 143 scissors repeats the same few videos' frames). Seeds 0-1 ran on the cloud workspace (torch 2.14 x86), seed 2 on the VM (torch 2.5.1 arm64). |
 | 2c | `r1a_smallcnn_fixed+offsets`: per-class logit offsets maximising macro-F1, tuned NESTED (on the other 4 folds' OOF predictions, applied to the 5th), `scripts/tune_offsets.py` | 0.664 ± 0.015 | 0.63 | 0.38 | **−0.025, reject.** The best offsets do not transfer across videos: the tuned scissor offset ranges from −2.5 to +1.0 between folds, i.e. the "right" class prior depends on which videos you look at. The model is also over-confident (median top probability 0.99, half of OOF predictions above 0.99 yet only 92% correct there), so small offsets change nothing and large ones overcorrect. |
 
 ### Rung 3a: frozen ImageNet features + logistic regression (`scripts/linear_probe.py`)
@@ -228,3 +229,11 @@ path), duplicate names across subfolders. A first preflight run failed
 because checkpoint metadata held a `TorchVersion` object that
 `torch.load(weights_only=True)` rejects; metadata is now forced to plain JSON
 types. Expected held-out macro-F1 of this recipe: ~0.69 (CV).
+
+### Rung 1-2 conclusion
+Fixing the bugs is what mattered: 0.534 → 0.689. For this from-scratch
+SmallCNN, every augmentation hurt (flip most, because tool orientation is a
+real class cue), and none of the three imbalance remedies beat the seed
+spread (class weights +0.006, balanced sampler −0.006, nested logit offsets
+−0.025). Carried forward: no flips anywhere (training or test time), no
+post-hoc offsets; class weights re-tested on the fine-tuned backbones.
