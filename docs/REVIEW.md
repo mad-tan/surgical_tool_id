@@ -1,0 +1,91 @@
+# Code review: what was wrong and what we changed
+
+Running log, polished at the end. Each entry: **where**, **what**, **why it
+matters for held-out macro-F1**, **evidence**, **fix** (filled in when made).
+Line numbers refer to the original commit (`Import original ...`).
+
+Ranking is by expected impact on the score the graders compute:
+`python predict.py --data-dir <DIR> --out <CSV>` → macro-F1 on unseen images.
+
+## Definitely bugs
+
+### 1. predict.py maps class indices to the wrong names
+- **Where:** `predict.py:19-22` takes names from `data_utils.py:15`
+  (`grasper, hook, clipper, scissor`), but the checkpoint was trained with
+  `legacy/cnn_baseline_v2.py:21` (`sorted(...)` → `clipper, grasper, hook, scissor`).
+- **Why:** every prediction except scissor is relabelled as another class.
+- **Evidence:** shipped `predict.py` on `validation/`: macro-F1 0.21, acc 0.11;
+  same predictions with the correct index→name order: macro-F1 0.79 (in-sample,
+  see #6). Preflight still passes; it only checks CSV shape.
+- **Fix:** _pending_ (save class names inside the checkpoint; predict reads them).
+
+### 2. predict.py ships the legacy CNN, not what train.py trains
+- **Where:** `predict.py:20,23` loads `SmallCNN` + `checkpoints/model_best.pt`;
+  `train.py:129` writes `resnet18_final.pt`, which nothing loads.
+- **Why:** improvements to train.py could never reach the submission.
+- **Fix:** _pending_.
+
+### 3. train.py destroys its inputs (train and val)
+- **Where:** `train.py:41-50` never divides by 255 (inputs reach ~1136 after
+  "normalisation"); `train.py:27` `ColorJitter` on a 0-255 float tensor clamps
+  to [0,1] → an image collapses to 3-4 distinct values; `train.py:88` also
+  augments the validation set.
+- **Evidence:** sample min/max/unique values printed before and after.
+- **Fix:** _pending_.
+
+### 4. Cross-entropy applied to softmax probabilities
+- **Where:** `train.py:108,119`.
+- **Why:** double softmax: loss floor 0.744 on a perfect prediction, gradient
+  4x smaller at init; the model can never become confident.
+- **Fix:** _pending_.
+
+### 5. Backbone frozen despite "full finetune"; BN stats drift; no eval mode
+- **Where:** `train.py:72-75` (2,052 of 11.2M params trainable); validation
+  loop `train.py:115` never calls `model.eval()`/`no_grad`. BatchNorm running
+  stats still update in train mode with frozen weights (verified).
+- **Fix:** _pending_.
+
+### 6. No honest validation anywhere
+- **Where:** `train.py:61,83` pools train+validation, random image-level split;
+  8 of 10 videos are in both the given train/ and validation/ folders;
+  `legacy/cnn_baseline_v2.py:32` trains on everything, so validation/ is
+  in-sample for the shipped model.
+- **Why:** consecutive frames of one video are near-duplicates, so a random
+  split measures memorisation of a video, not tool recognition. No number in
+  the repo predicted held-out performance, so model choices were blind.
+- **Fix:** _pending_ (video-grouped CV, step 3).
+
+### 7. Shipped model trained on corrupted labels
+- **Where:** `notebooks/EDA_final.ipynb` (`n_flip` cell) deliberately flips 4%
+  of labels into `labels.csv` (56 files disagree with their folder);
+  filename-keyed lookup (`legacy/cnn_baseline_v2.py:32-44`, `data_utils.py:44`)
+  collides on the 26 filenames that exist in two class folders.
+- **Fix:** _pending_ (labels = folder name, samples keyed by full path).
+
+### 8. "Best" legacy checkpoint chosen by training loss
+- **Where:** `legacy/cnn_baseline_v2.py:107`.
+
+### 9. evaluate_model.py reports misleading numbers
+- **Where:** per-class names in wrong order (`helpers/image_helpers.py:38`);
+  preprocessing (cv2 BGR, colour, ImageNet norm) differs from how the CNN was
+  trained (grayscale /255): reports 0.66 where matched preprocessing gives 0.82.
+
+### 10. exp02 EfficientNet result is meaningless
+- **Where:** `experiments/exp02_efficientnet/model_def.py:8` `weights=None`
+  (not pretrained); `run_experiment.py:58` Adam lr=0.1, wd=0.1, re-created every
+  epoch; `:48` `shuffle=False` on class-sorted ImageFolder (33/36 batches are a
+  single class); `:74` `val_loader = train_loader`. results.json = 0.103
+  (chance) while the docstring claims 0.94.
+
+## Suspicious, to test under video-grouped CV
+1. No class-imbalance handling (scissor ≈10%); macro-F1 weighs it equally.
+2. 128×86 images squashed to 128×128 / 224×224 (aspect distortion).
+3. Grayscale input discards colour.
+4. Small from-scratch CNN vs pretrained backbone (weights must be bundled:
+   grading is offline).
+5. Legacy recipe: MSE on softmax, batch size 2 with BatchNorm.
+6. exp02 augmentations (hue 0.15, RandomResizedCrop scale 0.3, NEAREST).
+7. stats.json normalisation computed over train+val; not ImageNet stats.
+8. Robustness at grading: `.png` case-sensitive filter, silent zero-image
+   fallback, `.DS_Store` read as a class by `os.listdir`, predict.py import
+   depends on labels.csv, 26 duplicate filenames collapse in a filename-keyed CSV.
