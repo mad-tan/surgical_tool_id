@@ -78,7 +78,8 @@ def train(cfg, x, y, seed, device="cpu", state_path=None, deadline=None, log=Non
                 continue
             for g in opt.param_groups:
                 g["lr"] = lr_at(st["epoch"] * steps + b, steps, cfg)
-            xb = prepare(x[bi], cfg["pre"], aug).to(device, non_blocking=True)
+            # move the uint8 batch first so augmentation runs on the GPU when there is one
+            xb = prepare(x[bi].to(device, non_blocking=True), cfg["pre"], aug)
             loss = crit(model(xb), y[bi].to(device))
             opt.zero_grad(set_to_none=True)
             loss.backward()
@@ -101,7 +102,7 @@ def predict_logits(model, x, cfg_pre, device="cpu", bs=128, tta_hflip=False):
     model.eval()
     out = []
     for i in range(0, len(x), bs):
-        xb = prepare(x[i:i + bs], cfg_pre).to(device)
+        xb = prepare(x[i:i + bs].to(device), cfg_pre)
         lg = model(xb)
         if tta_hflip:
             lg = (lg.softmax(1) + model(xb.flip(3)).softmax(1)).log()

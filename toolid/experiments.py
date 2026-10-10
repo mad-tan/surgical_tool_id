@@ -56,6 +56,48 @@ EXPERIMENTS = {
     # 2c is post-hoc (scripts/tune_offsets.py), no training.
 }
 
+# ---- Rung 3b+: fine-tuning ImageNet backbones (run on a GPU; see notebooks/colab_ladder.ipynb).
+# Choices fixed from earlier rungs: native 86x128 input (no stretch), NO flips
+# (rung 1d), no post-hoc offsets (2c). Fixed schedule: 20 epochs, AdamW 3e-4,
+# wd 0.05, 1 warm-up epoch, cosine. Backbones from rung 3a: MobileNetV3-L and
+# EfficientNet-B0 (ResNet-18 features were clearly worse).
+COLOUR = {"gain": 0.15, "hue": 8, "saturation": 0.2, "brightness": 0.1, "contrast": 0.1}
+AFFINE = {"scale": 0.1, "translate": 0.05, "rotate": 10}
+_ARCH = {"mbv3": "mobilenet_v3_large", "effb0": "efficientnet_b0"}
+
+
+def _ft(arch, **over):
+    base = dict(arch=_ARCH[arch], pretrained=True, pre={"geometry": "native", "colour": "none"},
+                epochs=20, lr=3e-4, weight_decay=0.05)
+    base.update(over)
+    return _cfg(**base)
+
+
+for _a in _ARCH:
+    EXPERIMENTS.update({
+        # 3b: plain fine-tune, no augmentation
+        f"r3b_{_a}_ft": _ft(_a),
+        # 3c: + colour augmentation (strong per-channel gain/hue: per-video cast is a nuisance;
+        #     mild brightness/contrast: they carry class signal) - scripts/colour_analysis.py
+        f"r3c_{_a}_ft_colour": _ft(_a, augment={"colour": COLOUR}),
+        # 3d: gray-world white-balance normalisation instead of colour augmentation
+        f"r3d_{_a}_ft_wb": _ft(_a, pre={"geometry": "native", "colour": "wb"}),
+        # 3e: colour aug + 2x upsampled input (172x256)
+        f"r3e_{_a}_ft_colour_x2": _ft(_a, augment={"colour": COLOUR}, pre={"geometry": "x2", "colour": "none"}),
+        # 3f: colour aug + inverse-frequency class weights (rung 2a was a tie on SmallCNN)
+        f"r3f_{_a}_ft_colour_cw": _ft(_a, augment={"colour": COLOUR}, loss={"class_weights": True}),
+        # 3g: colour aug + mild affine (affine hurt the position-specific SmallCNN, 1c;
+        #     a globally pooled backbone may react differently)
+        f"r3g_{_a}_ft_colour_affine": _ft(_a, augment={"colour": COLOUR, "affine": AFFINE}),
+    })
+
+# Groups of experiments run together in one Colab session.
+STAGES = {
+    "3b": [f"r3{k}_{a}_{suffix}" for a in _ARCH for k, suffix in
+           [("b", "ft"), ("c", "ft_colour"), ("d", "ft_wb"), ("e", "ft_colour_x2"),
+            ("f", "ft_colour_cw"), ("g", "ft_colour_affine")]],
+}
+
 
 def get(name):
     if name not in EXPERIMENTS:
