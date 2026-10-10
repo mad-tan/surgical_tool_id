@@ -161,3 +161,12 @@ Per-image colour statistics, share of variance explained by video vs class (eta�
   standardisation of mean/std would delete real hook evidence, so test
   white-balance-only normalisation (equalise channel ratios, keep luminance)
   rather than full per-image normalisation.
+
+## Experiment log (video-grouped 5-fold CV, pooled OOF macro-F1, mean ± std over seeds 0,1,2)
+Bar to beat = previous best + more than the seed spread. Every row is kept,
+including ones that did not help. Full reports: `results/cv/<name>.json`.
+
+| # | Experiment | macro-F1 | clipper F1 | scissor F1 | Verdict |
+|---|---|---|---|---|---|
+| 0 | Legacy recipe retrained in folds, folder labels (`baseline_legacy_retrain_folder`) | 0.534 ± 0.034 | 0.40 | 0.20 | baseline |
+| 1a | `r1a_smallcnn_fixed`: same SmallCNN, bugs fixed only: RGB, black-pad to 128×128 (no stretch), CE on logits, batch 32, AdamW 1e-3 wd 1e-2, fixed 30-epoch cosine, no augmentation | **0.689 ± 0.008** | 0.65 ± 0.03 | 0.42 ± 0.01 | **+0.155, keep.** Seed spread also falls 4× (0.034 → 0.008): the fixed schedule removes the early-stopping lottery. |
