@@ -17,13 +17,19 @@ Ranking is by expected impact on the score the graders compute:
 - **Evidence:** shipped `predict.py` on `validation/`: macro-F1 0.21, acc 0.11;
   same predictions with the correct index→name order: macro-F1 0.79 (in-sample,
   see #6). Preflight still passes; it only checks CSV shape.
-- **Fix:** _pending_ (save class names inside the checkpoint; predict reads them).
+- **Fix (done):** checkpoints are self-describing (`toolid/checkpoint.py`): they
+  store the class names in output-index order, the architecture and the
+  preprocessing; `predict.py` reads all three from the checkpoint, so the
+  mapping can no longer drift between training and inference.
 
 ### 2. predict.py ships the legacy CNN, not what train.py trains
 - **Where:** `predict.py:20,23` loads `SmallCNN` + `checkpoints/model_best.pt`;
   `train.py:129` writes `resnet18_final.pt`, which nothing loads.
 - **Why:** improvements to train.py could never reach the submission.
-- **Fix:** _pending_.
+- **Fix (done):** `train.py` now trains the final model with a named,
+  CV-evaluated experiment config and writes `checkpoints/model.pt`, which is
+  exactly what `predict.py` loads by default. No dependency on legacy/,
+  data_utils.py or labels.csv.
 
 ### 3. train.py destroys its inputs (train and val)
 - **Where:** `train.py:41-50` never divides by 255 (inputs reach ~1136 after
@@ -89,6 +95,12 @@ Ranking is by expected impact on the score the graders compute:
 8. Robustness at grading: `.png` case-sensitive filter, silent zero-image
    fallback, `.DS_Store` read as a class by `os.listdir`, predict.py import
    depends on labels.csv, 26 duplicate filenames collapse in a filename-keyed CSV.
+   **Fixed in the new predict.py:** case-insensitive extension, hidden files and
+   folders ignored, flat folder or class subfolders, unreadable images listed and
+   exit status 2 (no silent black-image guess), no labels.csv/legacy imports,
+   one row per image even when names repeat (with a stderr note; the duplicate
+   rows are unavoidable given a filename-keyed CSV). Images not 128×86 are
+   resized to 128×86 rather than rejected.
 
 ## Data observations (step 2, `scripts/make_data_figures.py`)
 - Every image is a 128×86 crop centred on one instrument tip, cut from a
@@ -202,3 +214,13 @@ only when fine-tuning; (4) class-balanced weighting is a small, consistent
 plus at native resolution (+0.004 to +0.019), mostly on scissor.
 (First pass used C grid 0.01-1; EfficientNet picked the edge C=1 in every
 fold, so the grid was widened to include 10 and all twelve were re-run.)
+
+## Inference check (after rung 1)
+Interim checkpoint = rung-1a recipe trained on all 1402 images (seed 0),
+0.3 MB. `python check_submission.py` → PREFLIGHT PASSED. CPU (4-core arm64
+VM): 277 images 2.0 s, 1125 images 4.6 s wall including start-up. Tested:
+flat folder, `.PNG`, `.DS_Store`/hidden folder, a corrupt PNG (exit 2 with the
+path), duplicate names across subfolders. A first preflight run failed
+because checkpoint metadata held a `TorchVersion` object that
+`torch.load(weights_only=True)` rejects; metadata is now forced to plain JSON
+types. Expected held-out macro-F1 of this recipe: ~0.69 (CV).

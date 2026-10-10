@@ -1,83 +1,103 @@
-"""Inference CLI - runs the current best checkpoint over a directory of
-images and writes out a predictions CSV.
+"""Predict surgical tool classes for a folder of 128x86 PNG crops.
 
-Usage:
-  python predict.py --data-dir <DIR> --out <CSV>
+    python predict.py --data-dir <DIR> --out <CSV>
 
-<DIR> should look like the data/cholec-tinytools/train (or validation)
-folder: one subfolder per class, containing .png frames. A flat folder of
-images (no subfolders) also works.
+<DIR> may contain class subfolders (like data/cholec-tinytools/validation)
+and/or images directly. Hidden files (e.g. .DS_Store) are ignored; the
+extension check is case-insensitive. Output: CSV with header
+`filename,predicted_class`, one row per image (basename only, as the graders
+expect), predicted_class in {clipper, grasper, hook, scissor}.
+
+Runs on CPU, never downloads anything: the checkpoint (default
+checkpoints/model.pt) carries the architecture, class names, preprocessing
+and all weights. If any image cannot be read, the script lists them and exits
+with status 2 instead of guessing a class from a blank image.
 """
 import argparse
 import csv
 import os
+import sys
+import time
+from collections import Counter
+from pathlib import Path
 
 import torch
-from PIL import Image
-from torch.utils.data import DataLoader, Dataset
 
-from data_utils import get_class_names
-from legacy.cnn_baseline_v2 import SmallCNN
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+from toolid import checkpoint  # noqa: E402
+from toolid.preprocess import UnreadableImage, load_rgb, prepare, stack_uint8  # noqa: E402
 
-CLASS_NAMES = get_class_names()
-CHECKPOINT_PATH = os.path.join(os.path.dirname(__file__), "checkpoints", "model_best.pt")
+DEFAULT_CKPT = ROOT / "checkpoints" / "model.pt"
+IMAGE_EXTS = {".png"}
 
 
-class InferenceDataset(Dataset):
-    def __init__(self, data_dir):
-        subdirs = [os.path.join(data_dir, d) for d in os.listdir(data_dir)
-                   if os.path.isdir(os.path.join(data_dir, d))]
-        self.paths = []
-        if subdirs:
-            for d in subdirs:
-                self.paths.extend(os.path.join(d, f) for f in os.listdir(d) if f.endswith(".png"))
-        else:
-            self.paths.extend(os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith(".png"))
+def find_images(data_dir: Path):
+    """Images directly in data_dir plus images one level down (class folders)."""
+    def images_in(d):
+        return sorted(p for p in d.iterdir()
+                      if p.is_file() and not p.name.startswith(".") and p.suffix.lower() in IMAGE_EXTS)
+    files = images_in(data_dir)
+    for d in sorted(p for p in data_dir.iterdir() if p.is_dir() and not p.name.startswith(".")):
+        files += images_in(d)
+    return files
 
-    def __len__(self):
-        return len(self.paths)
 
-    def __getitem__(self, idx):
-        path = self.paths[idx]
-        try:
-            img = Image.open(path).convert("L").resize((128, 128))
-            tensor = torch.tensor(list(img.getdata()), dtype=torch.float32).view(1, 128, 128) / 255.0
-            tensor = tensor.repeat(3, 1, 1)
-        except Exception:
-            # corrupt or unreadable frame - fall back to a blank image so
-            # the batch shapes stay consistent and inference doesn't stop
-            tensor = torch.zeros(3, 128, 128)
-        return tensor, os.path.basename(path)
+@torch.no_grad()
+def predict_probs(models, x_uint8, pre, tta_hflip, batch_size=256):
+    out = []
+    for i in range(0, len(x_uint8), batch_size):
+        xb = prepare(x_uint8[i:i + batch_size], pre)
+        p = 0
+        for m in models:
+            p = p + m(xb).softmax(1)
+            if tta_hflip:
+                p = p + m(xb.flip(3)).softmax(1)
+        out.append(p / (len(models) * (2 if tta_hflip else 1)))
+    return torch.cat(out)
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--data-dir", required=True)
-    ap.add_argument("--out", required=True)
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--data-dir", required=True, type=Path)
+    ap.add_argument("--out", required=True, type=Path)
+    ap.add_argument("--checkpoint", type=Path, default=DEFAULT_CKPT)
     args = ap.parse_args()
+    t0 = time.time()
+    torch.set_num_threads(os.cpu_count() or 1)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = SmallCNN(num_classes=len(CLASS_NAMES)).to(device)
-    state = torch.load(CHECKPOINT_PATH, map_location=device)
-    model.load_state_dict(state)
-    model.eval()
+    if not args.data_dir.is_dir():
+        sys.exit(f"error: --data-dir {args.data_dir} is not a directory")
+    files = find_images(args.data_dir)
+    if not files:
+        sys.exit(f"error: no {'/'.join(sorted(IMAGE_EXTS))} images found in {args.data_dir} or its subfolders")
 
-    ds = InferenceDataset(args.data_dir)
-    loader = DataLoader(ds, batch_size=64, shuffle=False)
+    arrays, bad = [], []
+    for p in files:
+        try:
+            arrays.append(load_rgb(p))
+        except UnreadableImage as e:
+            bad.append(str(e))
+    if bad:
+        print(f"error: {len(bad)} unreadable image(s); refusing to guess:", *bad, sep="\n  ", file=sys.stderr)
+        sys.exit(2)
 
-    rows = []
-    with torch.no_grad():
-        for imgs, names in loader:
-            imgs = imgs.to(device)
-            preds = model(imgs).argmax(dim=1).cpu().tolist()
-            for name, p in zip(names, preds):
-                rows.append((name, CLASS_NAMES[p]))
+    ck, models = checkpoint.load(args.checkpoint)
+    probs = predict_probs(models, stack_uint8(arrays), ck["pre"], ck["tta_hflip"])
+    names = [ck["classes"][i] for i in probs.argmax(1).tolist()]
 
+    args.out.parent.mkdir(parents=True, exist_ok=True)
     with open(args.out, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["filename", "predicted_class"])
-        w.writerows(rows)
-    print(f"wrote {len(rows)} predictions to {args.out}")
+        w.writerows((p.name, n) for p, n in zip(files, names))
+
+    dup = [n for n, c in Counter(p.name for p in files).items() if c > 1]
+    if dup:
+        print(f"note: {len(dup)} filename(s) occur in more than one subfolder (e.g. {dup[0]}); "
+              f"each gets its own row", file=sys.stderr)
+    print(f"wrote {len(files)} predictions to {args.out} "
+          f"({len(models)} model(s){' + flip TTA' if ck['tta_hflip'] else ''}, {time.time() - t0:.1f}s)")
 
 
 if __name__ == "__main__":

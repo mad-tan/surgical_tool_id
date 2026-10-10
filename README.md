@@ -4,6 +4,23 @@ Classifies 128×86 laparoscopic crops into `clipper`, `grasper`, `hook`, `scisso
 Work in progress; see `docs/REVIEW.md` for the review of the original code,
 the evaluation protocol and every experiment.
 
+## Predict (what the graders run)
+```bash
+python predict.py --data-dir <DIR> --out <CSV>
+```
+CPU only, no downloads. Uses `checkpoints/model.pt` (self-describing: class
+names, architecture, preprocessing and weights). Check the plumbing with
+`python check_submission.py`.
+
+## Evaluate and train
+```bash
+python scripts/describe_folds.py                 # the 5 video-grouped folds
+python scripts/cv.py --exp r1a_smallcnn_fixed     # 5 folds x 3 seeds -> results/cv/
+python train.py --exp r1a_smallcnn_fixed --seeds 0 --out checkpoints/model.pt
+```
+Experiment configs live in `toolid/experiments.py`.
+Requirements: Python 3.10+, torch, torchvision, numpy, Pillow, scikit-learn.
+
 ## Pretrained ImageNet weights (training only)
 `predict.py` never needs these: the shipped checkpoint contains all of its
 weights. Training a pretrained backbone needs them in `weights/` (git-ignored):
