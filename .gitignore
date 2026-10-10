@@ -21,3 +21,7 @@ outputs/
 preds*.csv
 wandb/
 lightning_logs/
+
+# ImageNet weights: needed only for training, downloaded per README.md.
+# The shipped checkpoint in checkpoints/ is self-contained.
+weights/
