@@ -41,6 +41,21 @@ EXPERIMENTS = {
     # Rung 1b: + light geometric augmentation (flip, small scale/shift/rotate).
     "r1b_smallcnn_fixed_aug": _cfg(augment={"hflip": True,
                                             "affine": {"scale": 0.1, "translate": 0.05, "rotate": 10}}),
+    # Rung 1b came out WORSE than 1a (0.581 vs 0.689). Class-mean images show
+    # hook/clipper/scissor shafts entering from the right and graspers from both
+    # sides, so horizontal flip may destroy a real cue. Split 1b to find out:
+    "r1c_smallcnn_affine": _cfg(augment={"affine": {"scale": 0.1, "translate": 0.05, "rotate": 10}}),
+    "r1d_smallcnn_hflip": _cfg(augment={"hflip": True}),
+    # Rung 2: class imbalance (scissor ~10%, clipper ~19%), on top of rung 1b.
+    # 2a: cross-entropy weighted by inverse class frequency.
+    "r2a_smallcnn_aug_classweights": _cfg(augment={"hflip": True,
+                                                   "affine": {"scale": 0.1, "translate": 0.05, "rotate": 10}},
+                                          loss={"class_weights": True}),
+    # 2b: class-balanced sampling (each batch ~equal classes, with replacement).
+    "r2b_smallcnn_aug_balanced": _cfg(augment={"hflip": True,
+                                               "affine": {"scale": 0.1, "translate": 0.05, "rotate": 10}},
+                                      sampler="balanced"),
+    # 2c is post-hoc (scripts/tune_offsets.py), no training.
 }
 
 

@@ -170,6 +170,7 @@ including ones that did not help. Full reports: `results/cv/<name>.json`.
 |---|---|---|---|---|---|
 | 0 | Legacy recipe retrained in folds, folder labels (`baseline_legacy_retrain_folder`) | 0.534 ± 0.034 | 0.40 | 0.20 | baseline |
 | 1a | `r1a_smallcnn_fixed`: same SmallCNN, bugs fixed only: RGB, black-pad to 128×128 (no stretch), CE on logits, batch 32, AdamW 1e-3 wd 1e-2, fixed 30-epoch cosine, no augmentation | **0.689 ± 0.008** | 0.65 ± 0.03 | 0.42 ± 0.01 | **+0.155, keep.** Seed spread also falls 4× (0.034 → 0.008): the fixed schedule removes the early-stopping lottery. |
+| 1b | `r1b_smallcnn_fixed_aug`: 1a + horizontal flip + affine (scale ±10%, shift ±5%, rotate ±10°) | 0.581 ± 0.021 | 0.55 ± 0.02 | 0.29 ± 0.03 | **−0.108, reject.** Augmentation verified visually (tools intact, mild transforms), so not a bug. Hypothesis: flip destroys a real cue. Class-mean images (`docs/figures/class_means.png`, `scripts/class_mean_images.py`) show hook/clipper/scissor shafts entering from the right (left third brighter than right third: hook 0.43 vs 0.30) and graspers from both sides (X pattern; grasper is the only class darker on the left). Mirroring a right-hand tool makes it look like a grasper; grasper F1 fell 0.84 → 0.70. Split into 1c/1d to confirm. (Run on the cloud workspace: torch 2.14 x86; others on torch 2.5.1 arm64.) |
 
 ### Rung 3a: frozen ImageNet features + logistic regression (`scripts/linear_probe.py`)
 Penultimate features extracted once (no augmentation), StandardScaler +
