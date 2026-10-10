@@ -1,0 +1,70 @@
+{
+ "experiment": "r3a_probe_efficientnet_b0_native_balanced",
+ "arch": "efficientnet_b0",
+ "geometry": "native",
+ "class_weight_balanced": true,
+ "C_per_fold": [
+  1.0,
+  1.0,
+  1.0,
+  1.0,
+  1.0
+ ],
+ "summary": {
+  "macro_f1_mean": 0.7297869394268377,
+  "macro_f1_std": 0.0,
+  "per_class_f1_mean": {
+   "clipper": 0.7408759124087592,
+   "grasper": 0.8160676532769556,
+   "hook": 0.8725490196078431,
+   "scissor": 0.4896551724137931
+  }
+ },
+ "report": {
+  "n": 1402,
+  "macro_f1": 0.7297869394268377,
+  "accuracy": 0.7881597717546363,
+  "per_class_f1": {
+   "clipper": 0.7408759124087592,
+   "grasper": 0.8160676532769556,
+   "hook": 0.8725490196078431,
+   "scissor": 0.4896551724137931
+  },
+  "confusion": [
+   [
+    203,
+    26,
+    5,
+    28
+   ],
+   [
+    29,
+    386,
+    52,
+    25
+   ],
+   [
+    20,
+    17,
+    445,
+    23
+   ],
+   [
+    34,
+    25,
+    13,
+    71
+   ]
+  ],
+  "per_fold_macro_f1": [
+   0.6146531854883894,
+   0.7195129603798334,
+   0.6821840302614366,
+   0.7115315407432639,
+   0.7892812786317825
+  ],
+  "fold_mean": 0.7034325991009411,
+  "fold_std": 0.056617051514345484
+ },
+ "note": "deterministic: single run"
+}

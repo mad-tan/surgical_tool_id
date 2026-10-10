@@ -1,0 +1,70 @@
+{
+ "experiment": "r3a_probe_mobilenet_v3_large_native",
+ "arch": "mobilenet_v3_large",
+ "geometry": "native",
+ "class_weight_balanced": false,
+ "C_per_fold": [
+  0.1,
+  0.01,
+  1.0,
+  10.0,
+  1.0
+ ],
+ "summary": {
+  "macro_f1_mean": 0.7318827969889807,
+  "macro_f1_std": 0.0,
+  "per_class_f1_mean": {
+   "clipper": 0.7546468401486989,
+   "grasper": 0.8373056994818653,
+   "hook": 0.8746411483253589,
+   "scissor": 0.4609375
+  }
+ },
+ "report": {
+  "n": 1402,
+  "macro_f1": 0.7318827969889807,
+  "accuracy": 0.8009985734664765,
+  "per_class_f1": {
+   "clipper": 0.7546468401486989,
+   "grasper": 0.8373056994818653,
+   "hook": 0.8746411483253589,
+   "scissor": 0.4609375
+  },
+  "confusion": [
+   [
+    203,
+    25,
+    12,
+    22
+   ],
+   [
+    17,
+    404,
+    52,
+    19
+   ],
+   [
+    19,
+    16,
+    457,
+    13
+   ],
+   [
+    37,
+    28,
+    19,
+    59
+   ]
+  ],
+  "per_fold_macro_f1": [
+   0.5508657475937309,
+   0.7341581801622785,
+   0.7246004666371271,
+   0.7344443406313911,
+   0.8218327056355226
+  ],
+  "fold_mean": 0.71318028813201,
+  "fold_std": 0.08851441719779783
+ },
+ "note": "deterministic: single run"
+}

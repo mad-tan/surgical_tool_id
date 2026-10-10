@@ -170,3 +170,34 @@ including ones that did not help. Full reports: `results/cv/<name>.json`.
 |---|---|---|---|---|---|
 | 0 | Legacy recipe retrained in folds, folder labels (`baseline_legacy_retrain_folder`) | 0.534 ± 0.034 | 0.40 | 0.20 | baseline |
 | 1a | `r1a_smallcnn_fixed`: same SmallCNN, bugs fixed only: RGB, black-pad to 128×128 (no stretch), CE on logits, batch 32, AdamW 1e-3 wd 1e-2, fixed 30-epoch cosine, no augmentation | **0.689 ± 0.008** | 0.65 ± 0.03 | 0.42 ± 0.01 | **+0.155, keep.** Seed spread also falls 4× (0.034 → 0.008): the fixed schedule removes the early-stopping lottery. |
+
+### Rung 3a: frozen ImageNet features + logistic regression (`scripts/linear_probe.py`)
+Penultimate features extracted once (no augmentation), StandardScaler +
+LogisticRegression, C chosen by inner video-grouped CV on the training folds
+(grid 0.01-10). Deterministic, so one run per setting (no seed spread);
+differences below ~0.02 should be read as ties.
+
+| Backbone | input | class_weight | macro-F1 | clipper | scissor |
+|---|---|---|---|---|---|
+| MobileNetV3-L | native 86×128 | balanced | **0.740** | 0.76 | 0.48 |
+| MobileNetV3-L | native | none | 0.732 | 0.76 | 0.46 |
+| EfficientNet-B0 | native | balanced | 0.730 | 0.74 | 0.49 |
+| EfficientNet-B0 | native | none | 0.726 | 0.74 | 0.48 |
+| EfficientNet-B0 | x2 172×256 | none | 0.720 | 0.75 | 0.42 |
+| EfficientNet-B0 | x2 | balanced | 0.716 | 0.75 | 0.40 |
+| MobileNetV3-L | x2 | none | 0.715 | 0.75 | 0.40 |
+| MobileNetV3-L | x2 | balanced | 0.711 | 0.74 | 0.40 |
+| ResNet-18 | x2 | balanced | 0.657 | 0.65 | 0.36 |
+| ResNet-18 | x2 | none | 0.645 | 0.64 | 0.34 |
+| ResNet-18 | native | balanced | 0.639 | 0.60 | 0.34 |
+| ResNet-18 | native | none | 0.620 | 0.57 | 0.28 |
+
+Reading: (1) frozen MobileNetV3-L / EfficientNet-B0 features with a linear
+classifier already beat the best from-scratch CNN (0.689) by ~0.05;
+(2) ResNet-18 features are clearly worse (-0.08), so it is not the backbone
+to fine-tune first; (3) upsampling 2x does not help frozen features (-0.01
+to -0.03; ResNet-18 is the exception, +0.02), so native vs x2 is re-tested
+only when fine-tuning; (4) class-balanced weighting is a small, consistent
+plus at native resolution (+0.004 to +0.019), mostly on scissor.
+(First pass used C grid 0.01-1; EfficientNet picked the edge C=1 in every
+fold, so the grid was widened to include 10 and all twelve were re-run.)
