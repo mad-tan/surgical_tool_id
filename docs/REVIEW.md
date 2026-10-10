@@ -89,3 +89,23 @@ Ranking is by expected impact on the score the graders compute:
 8. Robustness at grading: `.png` case-sensitive filter, silent zero-image
    fallback, `.DS_Store` read as a class by `os.listdir`, predict.py import
    depends on labels.csv, 26 duplicate filenames collapse in a filename-keyed CSV.
+
+## Data observations (step 2, `scripts/make_data_figures.py`)
+- Every image is a 128×86 crop centred on one instrument tip, cut from a
+  full laparoscopic frame (the black circular endoscope border often shows in
+  a corner). Figures: `docs/figures/class_grid.png`, `docs/figures/same_name_pairs.png`.
+- Classes are visually distinct for a human: hook = white insulated cone on a
+  black shaft; grasper = long thin fenestrated jaws; clipper and scissor =
+  short metallic jaws on a banded silver shaft. Clipper vs scissor is the
+  hard pair; some scissor tips are also pale and cone-shaped like a hook.
+- Strong per-video appearance differences (white balance, blue/orange casts,
+  tissue colour), which is why splitting by video matters.
+- Consecutive frames 25 apart (1 s) are near-identical (e.g. 9152_15026 …
+  9152_15276), confirming that an image-level split leaks.
+- The 26 same-name pairs are **not duplicates or label errors**: they are two
+  different crops from the same video frame, one per instrument visible in
+  that frame (grasper + hook, grasper + clipper, grasper + scissor). Both labels
+  are correct. Consequences: (a) any code that keys samples by filename
+  silently loses or mislabels one of each pair; (b) in a filename-keyed CSV the
+  two predictions for such a frame cannot be told apart; (c) some crops show
+  part of the second tool, so a little label ambiguity is inherent.
