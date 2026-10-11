@@ -255,3 +255,4 @@ of noise than the seed. "Tie" = interval clearly includes 0.
 | # | Experiment | macro-F1 | clipper F1 | scissor F1 | Δ vs parent (per-seed; video-bootstrap 95%) | Verdict |
 |---|---|---|---|---|---|---|
 | 3b | `r3b_mbv3_ft`: MobileNetV3-L fine-tuned, no augmentation | 0.796 ± 0.006 | 0.82 ± 0.00 | 0.54 ± 0.03 | vs 1a SmallCNN: +0.107 (+0.091/+0.111/+0.120; [+0.056, +0.186]) | **Keep.** Clear win over every from-scratch model, and +0.056 over the frozen-feature probe of the same backbone (0.740), so fine-tuning is earning its cost. |
+| 3b | `r3b_effb0_ft`: EfficientNet-B0 fine-tuned, no augmentation | 0.808 ± 0.017 | 0.84 ± 0.03 | 0.55 ± 0.03 | vs 1a: +0.119 ([+0.081, +0.198]); vs MobileNetV3-L 3b: +0.012 (−0.002/+0.026/+0.011; [−0.002, +0.042]) | **Keep as the second candidate.** Same picture as MobileNetV3-L; the two backbones are tied within noise (EfficientNet is 3× more seed-sensitive here). |
