@@ -23,28 +23,45 @@ Usage:
    pause after SECS and resume on re-run; per-epoch state in runs/baseline_legacy/)
 """
 import argparse
+import csv
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-import predict as shipped_predict  # noqa: E402  (shipped inference code, unmodified)
-from legacy.cnn_baseline_v2 import SmallCNN  # noqa: E402
 from toolid.data import CLASSES, DATA_ROOT, index_dataset  # noqa: E402
 from toolid.folds import N_FOLDS, fold_of, split  # noqa: E402
 from toolid.metrics import cv_report, fmt  # noqa: E402
+from toolid.models import SmallCNN  # noqa: E402  (same architecture/state-dict keys as legacy/cnn_baseline_v2.py)
 
-# predict.py writes SHIPPED_NAMES[argmax]; the checkpoint's index i means CLASSES[i].
-SHIPPED_NAMES = list(shipped_predict.CLASS_NAMES)
+# The original code, labels.csv and model_best.pt were removed from the working
+# tree in the cleanup; they are read from the commit that imported the zip
+# (needs full git history: a shallow clone will not have it).
+ORIGINAL_COMMIT = "e2f05e1200c017ad27719259bc9f9332dbdcd0e6"
+
+
+def original_file(relpath):
+    out = ROOT / "runs" / "original" / relpath
+    if not out.exists():
+        out.parent.mkdir(parents=True, exist_ok=True)
+        blob = subprocess.run(["git", "show", f"{ORIGINAL_COMMIT}:{relpath}"], cwd=ROOT,
+                              capture_output=True, check=True).stdout
+        out.write_bytes(blob)
+    return out
+
+
+# The original predict.py wrote SHIPPED_NAMES[argmax] (data_utils.py:15 at the
+# original commit); the checkpoint's output index i actually means CLASSES[i].
+SHIPPED_NAMES = ["grasper", "hook", "clipper", "scissor"]
 SHIPPED_TO_TRUE_IDX = np.array([CLASSES.index(n) for n in SHIPPED_NAMES])
 RESULTS = ROOT / "results"
 torch.set_num_threads(os.cpu_count() or 4)
@@ -79,13 +96,15 @@ def both_reports(samples, pred_idx):
 
 
 def part_shipped(samples):
-    # sanity: our vectorised preprocessing == predict.py's InferenceDataset code
-    ds = shipped_predict.InferenceDataset.__new__(shipped_predict.InferenceDataset)
-    ds.paths = [str(samples[0].path)]
-    assert torch.equal(ds[0][0], legacy_tensor(samples[0].path))
-    model = SmallCNN(num_classes=4)
-    model.load_state_dict(torch.load(ROOT / "checkpoints" / "model_best.pt", map_location="cpu"))
+    # legacy_tensor() was asserted identical to the original predict.py
+    # InferenceDataset preprocessing when this script was first run (commit 91b7d66).
+    model = SmallCNN(4)
+    model.load_state_dict(torch.load(original_file("checkpoints/model_best.pt"), map_location="cpu",
+                                     weights_only=True))
     pred = predict_idx(model, preload(samples))
+    np.savez_compressed(RESULTS / "baseline_shipped_checkpoint_oof.npz", pred=pred[None],
+                        labels=np.array([s.label for s in samples]), folds=np.array([fold_of(s) for s in samples]),
+                        keys=np.array([s.key for s in samples]), seeds=np.array([0]))
     as_shipped, correct = both_reports(samples, pred)
     print(fmt(as_shipped, "A shipped ckpt, shipped mapping (IN-SAMPLE)"))
     print(fmt(correct, "A shipped ckpt, correct mapping (IN-SAMPLE)"))
@@ -96,7 +115,8 @@ def part_shipped(samples):
 def csv_labels():
     """Reproduce the legacy label lookup: labels.csv rows, filename -> last path
     found while walking train/ then validation/ (os.listdir order)."""
-    df = pd.read_csv(ROOT / "labels.csv")
+    with open(original_file("labels.csv"), newline="") as fh:
+        rows = list(csv.DictReader(fh))
     locate = {}
     for sp in ("train", "validation"):
         for cls in os.listdir(DATA_ROOT / sp):
@@ -104,7 +124,7 @@ def csv_labels():
             if d.is_dir():
                 for f in os.listdir(d):
                     locate[f] = d / f
-    return [(locate[r.filename], CLASSES.index(r.label)) for r in df.itertuples()]
+    return [(locate[r["filename"]], CLASSES.index(r["label"])) for r in rows]
 
 
 def _job_path(label_src, seed, fold):
@@ -117,7 +137,7 @@ def train_legacy_resumable(x, y, seed, state_path, deadline, max_epochs=30, pati
     resumed is bit-identical to an uninterrupted one. Returns the model with
     the lowest-training-loss weights once finished, or None if the deadline hit."""
     torch.manual_seed(seed)  # before building the model: seeds the weight init
-    model = SmallCNN(num_classes=4)
+    model = SmallCNN(4)
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
     if state_path.exists():
         st = torch.load(state_path, weights_only=False)
@@ -201,7 +221,7 @@ def part_retrain(samples, label_src, seeds, budget, shard, n_shards):
                for s, f in jobs):
         print("shard finished; other jobs still pending")
         return None
-    runs = {}
+    runs, preds = {}, []
     for seed in seeds:
         merged, epochs = {}, []
         for f in range(N_FOLDS):
@@ -209,6 +229,7 @@ def part_retrain(samples, label_src, seeds, budget, shard, n_shards):
             merged.update(st["pred"])
             epochs.append(st["epoch"])
         pred = np.array([merged[s.key] for s in samples])
+        preds.append(pred)
         as_shipped, correct = both_reports(samples, pred)
         print(fmt(as_shipped, f"B retrain[{label_src}] s{seed} shipped mapping"))
         print(fmt(correct, f"B retrain[{label_src}] s{seed} correct mapping"))
@@ -220,6 +241,10 @@ def part_retrain(samples, label_src, seeds, budget, shard, n_shards):
         summary[m] = {"macro_f1_mean": float(np.mean(v)), "macro_f1_std": float(np.std(v)),
                       "per_class_f1_mean": pc}
         print(f"B retrain[{label_src}] {m}: macroF1 {np.mean(v):.3f} ± {np.std(v):.3f} over seeds {seeds}")
+    # raw outputs (model output index per image and seed) for scripts/make_results_table.py
+    np.savez_compressed(RESULTS / f"baseline_legacy_retrain_{label_src}_oof.npz", pred=np.stack(preds),
+                        labels=np.array([s.label for s in samples]), folds=np.array([fold_of(s) for s in samples]),
+                        keys=np.array([s.key for s in samples]), seeds=np.array(seeds))
     return {"runs": {str(k): v for k, v in runs.items()}, "summary": summary}
 
 

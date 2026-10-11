@@ -87,6 +87,8 @@ def run(arch, geometry):
         r = cv_report(y, pred, folds)
         print(fmt(r, name), " C per fold:", chosen)
         OUT.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(OUT / f"{name}_oof.npz", pred=pred[None], labels=y, folds=folds,
+                            keys=np.array([s.key for s in samples]), seeds=np.array([0]))
         with open(OUT / f"{name}.json", "w") as fh:
             json.dump({"experiment": name, "arch": arch, "geometry": geometry, "class_weight_balanced": balanced,
                        "C_per_fold": chosen, "summary": {"macro_f1_mean": r["macro_f1"], "macro_f1_std": 0.0,
