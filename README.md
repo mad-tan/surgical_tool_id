@@ -99,3 +99,6 @@ docs/figures/               data figures (class examples, same-name pairs, class
 Developed with an AI coding agent (Claude). The complete conversation is
 submitted alongside this repository; the commit history follows it step by
 step, one commit per change or experiment.
+
+
+Conversation: https://claude.ai/share/f2b69a69-f25c-4346-9c87-279238512589
