@@ -254,3 +254,4 @@ of noise than the seed. "Tie" = interval clearly includes 0.
 
 | # | Experiment | macro-F1 | clipper F1 | scissor F1 | Δ vs parent (per-seed; video-bootstrap 95%) | Verdict |
 |---|---|---|---|---|---|---|
+| 3b | `r3b_mbv3_ft`: MobileNetV3-L fine-tuned, no augmentation | 0.796 ± 0.006 | 0.82 ± 0.00 | 0.54 ± 0.03 | vs 1a SmallCNN: +0.107 (+0.091/+0.111/+0.120; [+0.056, +0.186]) | **Keep.** Clear win over every from-scratch model, and +0.056 over the frozen-feature probe of the same backbone (0.740), so fine-tuning is earning its cost. |
