@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 from toolid import checkpoint, experiments  # noqa: E402
 from toolid.data import CLASSES, index_dataset  # noqa: E402
+from toolid.folds import split  # noqa: E402
 from toolid.preprocess import load_rgb, stack_uint8  # noqa: E402
 from toolid.trainer import train  # noqa: E402
 
@@ -44,16 +45,21 @@ def main():
     ap.add_argument("--budget", type=float, default=None)
     ap.add_argument("--threads", type=int, default=None)
     ap.add_argument("--no-pack", action="store_true", help="train only, do not write the checkpoint")
+    ap.add_argument("--exclude-fold", type=int, default=None,
+                    help="leave out this CV fold's videos (for the end-to-end held-out check)")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = ap.parse_args()
     if args.threads:
         torch.set_num_threads(args.threads)
     deadline = time.time() + args.budget if args.budget is not None else None
     cfg = experiments.get(args.exp)
-    work = ROOT / "runs" / "final" / args.exp
+    tag = args.exp if args.exclude_fold is None else f"{args.exp}_without_fold{args.exclude_fold}"
+    work = ROOT / "runs" / "final" / tag
     work.mkdir(parents=True, exist_ok=True)
 
     samples = index_dataset()
+    if args.exclude_fold is not None:
+        samples, _ = split(samples, args.exclude_fold)
     x = y = None
     for seed in args.seeds:
         done = work / f"s{seed}.weights.pt"
@@ -77,6 +83,7 @@ def main():
     args.out.parent.mkdir(parents=True, exist_ok=True)
     checkpoint.save(args.out, cfg["arch"], CLASSES, cfg["pre"], members, tta_hflip=args.tta,
                     info={"experiment": args.exp, "config": cfg, "seeds": args.seeds, "n_train": len(samples),
+                          "excluded_fold": args.exclude_fold,
                           "git_commit": git_commit(), "torch": torch.__version__})
     print(f"wrote {args.out} ({len(members)} member(s), {args.out.stat().st_size / 1e6:.1f} MB)")
 

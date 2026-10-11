@@ -288,3 +288,23 @@ it: smallest seed spread, best scissor F1, native resolution (the 2× variants
 cost 4× and were ties), and ~2× cheaper than EfficientNet-B0.
 Caveat: picking the best of 12 configs on the same CV data flatters the
 winner slightly; a fair expectation for unseen videos is a little under 0.86.
+
+## End-to-end held-out check of the shipped path (`scripts/heldout_check.py`)
+`train.py --exp r3g_mbv3_ft_colour_affine --seeds 0 --exclude-fold 0` (962
+images; video 7201 never seen, CPU torch 2.5.1), then `predict.py` run as a
+subprocess on fold 0's 440 images laid out like the graders' data (class
+subfolders, original filenames, 9 names occurring in two folders → 440 rows).
+
+| | macro-F1 | clipper | grasper | hook | scissor |
+|---|---|---|---|---|---|
+| predict.py on held-out fold 0 | 0.738 | 0.53 | 0.87 | 0.94 | 0.61 |
+| CV OOF, same fold, seeds 0/1/2 (GPU) | 0.667 / 0.698 / 0.663 | 0.35-0.44 | 0.87-0.88 | 0.93-0.94 | 0.42-0.55 |
+
+The shipped path reproduces the CV picture (no wiring loss: a class-order
+or preprocessing bug would push this far down, not up). It lands 0.04
+above the CV seed range for this fold. Fold 0 contains only 12 clippers:
+both runs find 10 of them, but the CV seed-0 model also labels 36 other
+images "clipper" against 16 here, which alone moves clipper F1 0.35 → 0.53.
+CPU vs GPU training draws augmentation randomness from different
+generators, so this is effectively a fourth seed. Lesson: single-fold
+macro-F1 on a 12-image class is very noisy; use the pooled 5-fold numbers.
