@@ -32,6 +32,19 @@ DEFAULT_CKPT = ROOT / "checkpoints" / "model.pt"
 IMAGE_EXTS = {".png"}
 
 
+def cpu_threads() -> int:
+    """Threads for CPU inference: the cores this process may actually use
+    (respects container/cgroup CPU affinity), capped at 8 (more gives no speed-up
+    for these small models), or OMP_NUM_THREADS if the caller set it."""
+    if os.environ.get("OMP_NUM_THREADS", "").isdigit():
+        return max(1, int(os.environ["OMP_NUM_THREADS"]))
+    try:
+        n = len(os.sched_getaffinity(0))
+    except AttributeError:  # macOS / Windows
+        n = os.cpu_count() or 1
+    return max(1, min(n, 8))
+
+
 def find_images(data_dir: Path):
     """Images directly in data_dir plus images one level down (class folders)."""
     def images_in(d):
@@ -64,7 +77,7 @@ def main():
     ap.add_argument("--checkpoint", type=Path, default=DEFAULT_CKPT)
     args = ap.parse_args()
     t0 = time.time()
-    torch.set_num_threads(os.cpu_count() or 1)
+    torch.set_num_threads(cpu_threads())
 
     if not args.data_dir.is_dir():
         sys.exit(f"error: --data-dir {args.data_dir} is not a directory")
@@ -82,7 +95,7 @@ def main():
         print(f"error: {len(bad)} unreadable image(s); refusing to guess:", *bad, sep="\n  ", file=sys.stderr)
         sys.exit(2)
 
-    ck, models = checkpoint.load(args.checkpoint)
+    ck, models = checkpoint.load(args.checkpoint)  # CPU; architectures built with weights=None, no download
     probs = predict_probs(models, stack_uint8(arrays), ck["pre"], ck["tta_hflip"])
     names = [ck["classes"][i] for i in probs.argmax(1).tolist()]
 

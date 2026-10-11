@@ -18,8 +18,11 @@ from .models import build
 FORMAT = "toolid-v1"
 
 
-def save(path, arch, classes, pre, members, tta_hflip=False, info=None):
-    members = [{k: v.detach().cpu() for k, v in m.items()} for m in members]
+def save(path, arch, classes, pre, members, tta_hflip=False, info=None, half=False):
+    """half=True stores floating-point tensors as float16 (half the file size);
+    load() casts them back to float32, so inference still runs in float32."""
+    cast = (lambda v: v.half() if v.is_floating_point() else v) if half else (lambda v: v)
+    members = [{k: cast(v.detach().cpu()) for k, v in m.items()} for m in members]
     # metadata must be plain JSON types so torch.load(weights_only=True) accepts it
     # (e.g. torch.__version__ is a TorchVersion object, which it rejects)
     plain = lambda o: json.loads(json.dumps(o, default=str))  # noqa: E731
@@ -34,6 +37,6 @@ def load(path, device="cpu"):
     models = []
     for sd in ck["members"]:
         m = build(ck["arch"], len(ck["classes"]), pretrained=False)
-        m.load_state_dict(sd)
+        m.load_state_dict({k: v.float() if v.is_floating_point() else v for k, v in sd.items()})
         models.append(m.to(device).eval())
     return ck, models

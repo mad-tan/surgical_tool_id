@@ -308,3 +308,15 @@ images "clipper" against 16 here, which alone moves clipper F1 0.35 → 0.53.
 CPU vs GPU training draws augmentation randomness from different
 generators, so this is effectively a fourth seed. Lesson: single-fold
 macro-F1 on a 12-image class is very noisy; use the pooled 5-fold numbers.
+
+## Final model (`checkpoints/model.pt`)
+`python train.py --exp r3g_mbv3_ft_colour_affine --seeds 0 1 2 --out checkpoints/model.pt`
+on all 1402 images (CPU, torch 2.5.1, ~5 min per seed). 3 × MobileNetV3-L,
+mean softmax, no test-time flip. Weights stored as float16 (25.7 MB instead of
+51 MB, under GitHub's 50 MB warning) and cast back to float32 at load: the
+predictions on all 1402 images are identical to the float32 file (largest
+probability difference 0.004, so only an image within 0.004 of a tie could
+flip). `check_submission.py` passes; 1402 images in 13 s on 4 CPU threads,
+~1.3 GB peak memory, no network access and an empty TORCH_HOME (nothing is
+downloaded: architectures are built with `weights=None`). predict.py uses the
+CPU cores available to the process, capped at 8, or OMP_NUM_THREADS.

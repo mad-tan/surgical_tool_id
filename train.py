@@ -45,6 +45,7 @@ def main():
     ap.add_argument("--budget", type=float, default=None)
     ap.add_argument("--threads", type=int, default=None)
     ap.add_argument("--no-pack", action="store_true", help="train only, do not write the checkpoint")
+    ap.add_argument("--fp32", action="store_true", help="store weights as float32 (default float16, half the size)")
     ap.add_argument("--exclude-fold", type=int, default=None,
                     help="leave out this CV fold's videos (for the end-to-end held-out check)")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -81,7 +82,7 @@ def main():
         return
     members = [torch.load(work / f"s{s}.weights.pt", map_location="cpu", weights_only=True) for s in args.seeds]
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    checkpoint.save(args.out, cfg["arch"], CLASSES, cfg["pre"], members, tta_hflip=args.tta,
+    checkpoint.save(args.out, cfg["arch"], CLASSES, cfg["pre"], members, tta_hflip=args.tta, half=not args.fp32,
                     info={"experiment": args.exp, "config": cfg, "seeds": args.seeds, "n_train": len(samples),
                           "excluded_fold": args.exclude_fold,
                           "git_commit": git_commit(), "torch": torch.__version__})
