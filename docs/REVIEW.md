@@ -237,3 +237,20 @@ real class cue), and none of the three imbalance remedies beat the seed
 spread (class weights +0.006, balanced sampler −0.006, nested logit offsets
 −0.025). Carried forward: no flips anywhere (training or test time), no
 post-hoc offsets; class weights re-tested on the fine-tuned backbones.
+
+## Rungs 3b-3g: fine-tuning ImageNet backbones (Colab T4, torch 2.11, commit 6cb2fa6)
+Run with `notebooks/colab_ladder.ipynb`, stage `3b`; results zip checked
+before use (sha256 df8b1aea…): all 12 configs × 5 folds × 3 seeds present,
+stored configs identical to `toolid/experiments.py`, keys/labels/folds
+identical to the local index, no unfilled or duplicated seeds, every
+macro-F1 recomputed from the raw logits, finish times evenly spaced (no
+disconnect/resume). Fixed for all: native 86×128, no flips, AdamW 3e-4,
+wd 0.05, 20-epoch cosine.
+
+Verdicts use `scripts/compare.py`: paired per-seed differences against the
+parent config plus a 95% **video-bootstrap** interval (resample the 10
+videos), because which videos end up in the held-out set is a bigger source
+of noise than the seed. "Tie" = interval clearly includes 0.
+
+| # | Experiment | macro-F1 | clipper F1 | scissor F1 | Δ vs parent (per-seed; video-bootstrap 95%) | Verdict |
+|---|---|---|---|---|---|---|
