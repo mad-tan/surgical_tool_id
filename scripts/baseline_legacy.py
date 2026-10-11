@@ -2,7 +2,7 @@
 
 Part A (--part shipped): score the original checkpoints/model_best.pt (read from
 the import commit, see ORIGINAL_COMMIT) under the video-grouped
-folds, using predict.py's own preprocessing code. This model was trained on
+folds, with the original predict.py preprocessing (re-implemented in legacy_tensor). Trained on
 ALL 1402 images (train + validation pooled via labels.csv), so every number
 here is in-sample: it measures fit, not generalisation. Reported twice:
 with predict.py's shipped index->name mapping, and with the mapping the

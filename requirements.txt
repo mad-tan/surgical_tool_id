@@ -1,0 +1,14 @@
+# predict.py needs torch, torchvision, numpy, pillow; training/evaluation scripts also need scikit-learn.
+# CPU is enough: predict.py never uses a GPU. On Linux, `pip install torch` pulls a large CUDA build;
+# for a CPU-only install run first:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# Tested in clean virtual environments, predict.py output byte-identical in all of them:
+#   floors:  Python 3.11, torch 2.4.1, torchvision 0.19.1, pillow 10.1.0, scikit-learn 1.4.2, numpy 2.4
+#   latest:  Python 3.13, torch 2.14, torchvision 0.29, pillow 12.3, scikit-learn 1.9, numpy 2.5
+#   also:    Python 3.10, torch 2.5.1 CPU (arm64); training on Colab with torch 2.11 CUDA.
+# Floors: torch < 2.4 and scikit-learn < 1.4.2 were built against NumPy 1.x and fail with NumPy 2.
+torch>=2.4,<3
+torchvision>=0.19,<1
+numpy>=1.24,<3
+pillow>=10.1,<13
+scikit-learn>=1.4.2,<2
