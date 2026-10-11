@@ -266,3 +266,25 @@ of noise than the seed. "Tie" = interval clearly includes 0.
 | 3f | `r3f_effb0_ft_colour_cw`: EfficientNet-B0 + colour aug + class weights | 0.819 ± 0.015 | 0.87 ± 0.02 | 0.59 ± 0.02 | vs 3c: +0.004 (+0.002/+0.011/−0.000; [−0.007, +0.024]) | **Tie, reject** (simpler without). |
 | 3g | `r3g_mbv3_ft_colour_affine`: MobileNetV3-L + colour aug + mild affine (scale ±10%, shift ±5%, rotate ±10°) | **0.838 ± 0.006** | 0.85 ± 0.02 | **0.64 ± 0.02** | vs 3c: +0.021 (+0.042/+0.020/+0.002; [+0.001, +0.042]) | **Keep: best config.** Highest mean, smallest seed spread, best scissor F1, native resolution. Affine hurt the SmallCNN (1c) but helps a globally pooled backbone, consistent with the position-specific SmallCNN head being the problem there. |
 | 3g | `r3g_effb0_ft_colour_affine`: EfficientNet-B0 + colour aug + mild affine | 0.821 ± 0.019 | 0.87 ± 0.02 | 0.59 ± 0.03 | vs 3c: +0.006 (+0.002/+0.002/+0.015; [−0.007, +0.017]); MobileNetV3-L 3g − this: +0.017 ([−0.018, +0.039]) | **Tie.** Not worse, but MobileNetV3-L 3g is at least as good, steadier and ~2× cheaper. |
+
+### Ensembling (`scripts/ensemble_oof.py`, on existing OOF logits, candidates fixed in advance)
+| Candidate | macro-F1 | clipper | scissor | Δ (video-bootstrap 95%) |
+|---|---|---|---|---|
+| A. one MobileNetV3-L 3g model (mean of 3 seeds) | 0.838 | 0.85 | 0.64 | |
+| B. 3-seed ensemble of MobileNetV3-L 3g (mean softmax) | **0.858** | 0.88 | 0.68 | B − A: [+0.016, +0.026] |
+| C. B + 3-seed EfficientNet-B0 3g (6 members) | 0.863 | 0.89 | 0.67 | C − B: [−0.011, +0.030] |
+
+The 3-seed ensemble is a robust gain (positive in every bootstrap
+resample; every one of the 12 configs gained +0.017 to +0.035 from it).
+Adding a second architecture is within noise and doubles the size, so not adopted.
+
+### Stage 3 conclusion: recipe to ship
+**MobileNetV3-L, ImageNet-pretrained, fine-tuned 20 epochs at native 86×128
+with colour + mild affine augmentation and no flips (`r3g_mbv3_ft_colour_affine`),
+3 seeds averaged.** CV macro-F1 0.858 for the ensemble (single model
+0.838 ± 0.006). It is the best config, but the top five configs are within
+video-bootstrap noise of each other, so the tie-breakers are what decide
+it: smallest seed spread, best scissor F1, native resolution (the 2× variants
+cost 4× and were ties), and ~2× cheaper than EfficientNet-B0.
+Caveat: picking the best of 12 configs on the same CV data flatters the
+winner slightly; a fair expectation for unseen videos is a little under 0.86.

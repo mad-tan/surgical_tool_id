@@ -1,0 +1,27 @@
+{
+ "a": "r3g_mbv3_ft_colour_affine",
+ "b": "r3g_effb0_ft_colour_affine",
+ "A_single_mean": 0.8378371024645404,
+ "B_seed_ensemble": 0.8580406418319015,
+ "C_two_arch_ensemble": 0.8634559379320128,
+ "per_class_B": {
+  "clipper": 0.876,
+  "grasper": 0.916,
+  "hook": 0.966,
+  "scissor": 0.675
+ },
+ "per_class_C": {
+  "clipper": 0.894,
+  "grasper": 0.923,
+  "hook": 0.967,
+  "scissor": 0.669
+ },
+ "B_minus_A_95": [
+  0.016,
+  0.026
+ ],
+ "C_minus_B_95": [
+  -0.011,
+  0.03
+ ]
+}
